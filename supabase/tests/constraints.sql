@@ -1,0 +1,18 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+select plan(9);
+insert into public.contacts(id,business_id,name) values('20000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000002','Gym contact');
+select throws_ok($$insert into public.conversations(business_id,contact_id) values('10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000002')$$,'23503',null,'cross-business contact relationship denied');
+select throws_ok($$insert into public.leads(business_id,contact_id,name) values('10000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000002','Invalid lead')$$,'23503',null,'cross-business lead relationship denied');
+set local role authenticated;
+set local request.jwt.claims='{"sub":"00000000-0000-4000-8000-000000000001","role":"authenticated"}';
+select throws_ok($$update public.businesses set created_at=now() where id='10000000-0000-4000-8000-000000000001'$$,'42501',null,'owner cannot rewrite immutable business fields');
+select throws_ok($$update public.businesses set timezone='Invalid/Zone' where id='10000000-0000-4000-8000-000000000001'$$,'P0001','Invalid timezone','direct API timezone validation');
+select throws_ok($$insert into public.usage_records(business_id,metric,quantity) values('10000000-0000-4000-8000-000000000001','messages',0)$$,'42501',null,'tenant cannot forge usage');
+select throws_ok($$insert into public.memberships(business_id,user_id,role) values('10000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001','owner')$$,'42501',null,'direct membership insertion denied');
+select throws_ok($$select * from private.super_admins$$,'42501',null,'platform administrator registry is private');
+set local role anon;
+select throws_ok($$select public.create_business('Unauthorized','gym','','UTC',90)$$,'42501',null,'anonymous onboarding denied');
+select throws_ok($$select public.manage_member('10000000-0000-4000-8000-000000000001','viewer@example.test','admin')$$,'42501',null,'anonymous membership management denied');
+select * from finish();
+rollback;
